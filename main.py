@@ -1,5 +1,6 @@
 from numpy import mean
 from numpy import std
+import numpy as np
 import pickle
 from matplotlib import pyplot
 from sklearn.model_selection import KFold
@@ -13,8 +14,7 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.optimizers import SGD
 import drawer
-
-
+import pylab
 
 def load_data():
 
@@ -39,19 +39,18 @@ def load_data():
 
 def define_model():
     model=Sequential()
-    model.add(Conv2D(8, (2,2),activation='relu',kernel_initializer='he_uniform',input_shape=(11,5,1)))
-    #model.add(Conv2D(8, (2,2),activation='relu', kernel_initializer='he_uniform', input_shape=(10,4,8)))
+    model.add(Conv2D(6, (3,3),activation='relu',kernel_initializer='he_uniform',input_shape=(11,5,1)))
+    model.add(Conv2D(3, (2,2),activation='relu', kernel_initializer='he_uniform', input_shape=(9,3,8)))
 
-    #model.add(MaxPool2D(2,2))
     model.add(Flatten())
-    #model.add(Dense(59,activation='relu',kernel_initializer='he_uniform'))
-    model.add(Dense(25, activation='relu', kernel_initializer='he_uniform'))
+    model.add(Dense(128,activation='softsign',kernel_initializer='he_uniform'))
+    model.add(Dense(128, activation='softsign', kernel_initializer='he_uniform'))
+    model.add(Dense(128, activation='softsign', kernel_initializer='he_uniform'))
     model.add(Dense(2, activation='softmax'))
 
-    opt=SGD(lr=0.01, momentum=0.9)
+    opt=SGD(lr=0.0449, momentum=0.9)
     model.compile(optimizer=opt,loss='categorical_crossentropy',metrics=['accuracy'])
     print(model.summary())
-
     return model
 
 def evaluate_model(dataX,dataY,nfolds=5):
@@ -61,7 +60,7 @@ def evaluate_model(dataX,dataY,nfolds=5):
     for train_ix, test_ix in kfold.split(dataX):
         model=define_model()
         trainX,trainY,testX,testY=dataX[train_ix],dataY[train_ix],dataX[test_ix],dataY[test_ix]
-        history=model.fit(trainX,trainY,epochs=10,batch_size=60,validation_data=(testX,testY),verbose=0)
+        history=model.fit(trainX,trainY,epochs=30,batch_size=60,validation_data=(testX,testY),verbose=0)
         print(history.history.keys())
         _,acc=model.evaluate(testX,testY,verbose=0)
         print('>%.3f'%(acc*100))
@@ -69,7 +68,6 @@ def evaluate_model(dataX,dataY,nfolds=5):
         histories.append(history)
     print("scores",scores)
     print("histories.len",len(histories))
-
     return scores,histories,model
 
 def summarize_plotter(histories):
@@ -116,6 +114,38 @@ def predict(model,predictX,predictY):
     print('accuracy:',correct/total)
     return predict_result
 
+def visualization(model,image):
+    layer_names = [layer.name for layer in model.layers]
+    layer_outputs = [layer.output for layer in model.layers]
+
+    feature_map_model = tf.keras.models.Model(model.input, layer_outputs)
+    input = image.reshape((1,) + image.shape)
+    feature_maps = feature_map_model.predict(input)
+    for layer_name, feature_map in zip(layer_names, feature_maps):
+        if len(feature_map.shape) == 4:  # Number of feature images/dimensions in a feature map of a layer
+            k = feature_map.shape[-1]
+            height = feature_map.shape[1]
+            width = feature_map.shape[2]
+            print('height:',height,'width:',width)
+            image_belt = np.zeros((height, width* k))
+            for i in range(k):
+                feature_image = feature_map[0, :, :, i]
+
+                feature_image -= feature_image.mean()
+                feature_image /= feature_image.std()
+                feature_image *= 64
+                feature_image += 128
+
+                feature_image = np.clip(feature_image, 0, 255).astype('uint8')
+
+                image_belt[:, i * width: (i + 1) * width] = feature_image
+            scale = 20. / k
+            pyplot.figure(figsize=(scale * k, scale))
+            pyplot.title(layer_name)
+            pyplot.grid(False)
+            pyplot.imshow(image_belt, aspect='auto')
+            pylab.show()
+
 
 def main():
     trainX,trainY,predictX,predictY=load_data()
@@ -124,11 +154,24 @@ def main():
     summarize_performance(scores)
     predict_result=predict(model,predictX,predictY)
     drawer.draw(predict_result,predictY)
+    '''
+    visualizeimg=np.array([[0, 0, 0, 0, 0],
+ [0, 1, 0, 0, 0],
+ [1, 1, 0, 0, 0],
+ [1, 1, 1, 0, 1],
+ [1, 1, 1, 1, 1],
+ [0, 0, 0, 0, 0],
+ [1, 1, 1, 1, 1],
+ [1, 1, 1, 0, 1],
+ [1, 1, 0, 0, 0],
+ [0, 1, 0, 0, 0],
+ [0, 0, 0, 0, 0]])
+    visualization(model,visualizeimg)
+    '''
 
 
 
 
 
-#main()
 load_data()
 main()
